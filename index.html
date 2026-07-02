@@ -1,0 +1,660 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Team Building Map — Špindlerův Mlýn</title>
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; }
+  html,body { width:100%; height:100%; overflow:hidden; background:#0d1b26; font-family:'Nunito',system-ui,sans-serif; overscroll-behavior:none; }
+  #app { width:100vw; height:100vh; display:block; touch-action:none; }
+  canvas { display:block; touch-action:none; }
+
+  .ui { position:fixed; z-index:20; }
+  .panel { background:rgba(16,28,38,0.62); border:1px solid rgba(255,255,255,0.16); border-radius:14px; backdrop-filter:blur(12px); }
+
+  #title { top:16px; left:16px; padding:10px 18px; }
+  #title h1 { font-family:Georgia,serif; font-size:1.05rem; color:#eaf4ff; letter-spacing:0.03em; font-weight:normal; }
+  #title p  { font-size:0.72rem; color:#9fc0d8; margin-top:2px; }
+
+  #controls { bottom:16px; right:16px; display:flex; flex-direction:column; gap:8px; align-items:flex-end; }
+  .ctrl-row { display:flex; gap:8px; }
+  .ctrl-btn {
+    width:46px; height:46px; border-radius:12px; cursor:pointer;
+    background:rgba(16,28,38,0.7); border:1px solid rgba(255,255,255,0.18);
+    color:#dcecf8; font-size:1.2rem; display:flex; align-items:center; justify-content:center;
+    backdrop-filter:blur(10px); transition:all 0.15s; user-select:none;
+  }
+  .ctrl-btn:hover { background:rgba(70,130,170,0.55); border-color:#7fc0e8; transform:translateY(-1px); }
+  .ctrl-btn.wide { width:auto; padding:0 14px; font-size:0.82rem; font-weight:700; }
+
+  #zoomind { bottom:16px; left:16px; padding:8px 14px; font-size:0.74rem; color:#bcd8ec; }
+  #zoomind b { color:#7fd0ff; }
+
+  #layers { top:16px; right:16px; padding:10px 12px; display:flex; flex-direction:column; gap:6px; }
+  #layers .lt { display:flex; align-items:center; gap:8px; font-size:0.76rem; color:#cfe4f4; cursor:pointer; user-select:none; }
+  #layers .lt input { accent-color:#5fb8e8; cursor:pointer; }
+  #layers .hdr { font-size:0.62rem; text-transform:uppercase; letter-spacing:0.1em; color:#7fa0b8; margin-bottom:2px; }
+
+  #hint { bottom:74px; left:50%; transform:translateX(-50%); color:rgba(210,232,248,0.7);
+    font-size:0.76rem; background:rgba(16,28,38,0.5); padding:7px 16px; border-radius:999px;
+    backdrop-filter:blur(8px); animation:hintfade 10s ease forwards; }
+  @keyframes hintfade { 0%,75%{opacity:1;} 100%{opacity:0; visibility:hidden;} }
+
+  #card {
+    position:fixed; z-index:25; top:50%; right:-420px; transform:translateY(-50%);
+    width:360px; max-width:88vw; max-height:84vh; overflow-y:auto;
+    background:linear-gradient(150deg,#15303f,#0e2230); border:1px solid rgba(127,200,232,0.3);
+    border-radius:20px; padding:26px 24px; color:#eaf4ff;
+    box-shadow:0 24px 70px rgba(0,0,0,0.6); transition:right 0.4s cubic-bezier(0.4,1.2,0.5,1);
+  }
+  #card.open { right:16px; }
+  #card .cclose { position:absolute; top:14px; right:14px; width:30px; height:30px; border-radius:50%;
+    background:rgba(255,255,255,0.1); border:none; color:#cfe4f4; cursor:pointer; font-size:1rem; }
+  #card .cicon { font-size:2.6rem; margin-bottom:8px; }
+  #card h2 { font-family:Georgia,serif; font-size:1.5rem; color:#fdd87a; margin-bottom:4px; }
+  #card .ctime { display:inline-block; background:rgba(253,216,122,0.15); border:1px solid rgba(253,216,122,0.4);
+    color:#fdd87a; border-radius:999px; padding:3px 12px; font-size:0.78rem; font-weight:700; margin-bottom:12px; }
+  #card .ctype { font-size:0.7rem; text-transform:uppercase; letter-spacing:0.1em; color:#7fb8d8; margin-bottom:10px; }
+  #card p.cdesc { font-size:0.92rem; line-height:1.6; color:#cfe0ee; }
+
+  #loading { position:fixed; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center;
+    background:#0d1b26; color:#8ab8d8; font-size:1.05rem; z-index:100; transition:opacity 0.6s; gap:16px; }
+  #loading.hide { opacity:0; pointer-events:none; }
+  #bar { width:200px; height:6px; background:rgba(255,255,255,0.1); border-radius:3px; overflow:hidden; }
+  #bar i { display:block; height:100%; width:0%; background:linear-gradient(90deg,#5fb8e8,#7fd0a0); transition:width 0.2s; }
+
+  /* placement mode helper */
+  #placehud { top:70px; left:16px; padding:8px 14px; font-size:0.72rem; color:#fdd87a; display:none; }
+  #placehud.on { display:block; }
+
+  @media (max-width:560px){ #layers { display:none; } #title h1 { font-size:0.9rem; } }
+</style>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;700;900&display=swap" rel="stylesheet">
+</head>
+<body>
+<div id="loading">
+  <div>Loading the map… 🗺️</div>
+  <div id="bar"><i></i></div>
+  <div style="font-size:0.7rem;opacity:0.6">14 MB · first load may take a moment</div>
+</div>
+
+<div id="title" class="ui panel">
+  <h1>🏔️ Team Building 2026</h1>
+  <p>Špindlerův Mlýn · Krkonoše</p>
+</div>
+
+<div id="layers" class="ui panel">
+  <div class="hdr">Layers</div>
+  <label class="lt"><input type="checkbox" data-layer="zones" checked> 📍 Zones</label>
+  <label class="lt"><input type="checkbox" data-layer="people" checked> 👥 People</label>
+  <label class="lt"><input type="checkbox" data-layer="labels" checked> 🏷️ Labels</label>
+  <label class="lt"><input type="checkbox" data-layer="decor" checked> ✨ Decor</label>
+  <label class="lt"><input type="checkbox" data-layer="eggs" checked> 🥚 Eggs</label>
+  <label class="lt"><input type="checkbox" data-layer="info" checked> 🧭 Info post</label>
+</div>
+
+<div id="eggtracker" class="ui panel" style="top:16px; left:50%; transform:translateX(-50%); padding:8px 16px; font-size:0.78rem; font-weight:700; color:#cfe4f4;">🥚 Eggs: <b id="egg-count" style="color:#fdd87a">0</b> / <span id="egg-total">5</span></div>
+
+<div id="zoomind" class="ui panel">Zoom: <b id="zlevel">Overview</b></div>
+
+<div id="placehud" class="ui panel">🎯 Placement mode ON — click the map to log world coords (see console). Press P to toggle.</div>
+
+<div id="controls" class="ui">
+  <div class="ctrl-row">
+    <div class="ctrl-btn" id="rotL" title="Rotate left (Q)">⟲</div>
+    <div class="ctrl-btn" id="rotR" title="Rotate right (E)">⟳</div>
+  </div>
+  <div class="ctrl-row">
+    <div class="ctrl-btn" id="zoomIn" title="Zoom in (+)">＋</div>
+    <div class="ctrl-btn" id="zoomOut" title="Zoom out (−)">－</div>
+  </div>
+  <div class="ctrl-row">
+    <div class="ctrl-btn wide" id="reset" title="Reset (R)">⌂ Reset</div>
+  </div>
+</div>
+
+<div id="hint" class="ui">Drag to pan · WASD/arrows to move · scroll to zoom · Q/E rotate · click a 📍 marker</div>
+
+<div id="card">
+  <button class="cclose" onclick="closeCard()">✕</button>
+  <div class="cicon" id="card-icon">📍</div>
+  <h2 id="card-title">Zone</h2>
+  <div class="ctime" id="card-time">—</div>
+  <div class="ctype" id="card-type">—</div>
+  <p class="cdesc" id="card-desc"></p>
+</div>
+
+<div id="app"></div>
+
+<script type="importmap">
+{ "imports": {
+  "three": "https://cdnjs.cloudflare.com/ajax/libs/three.js/0.160.0/three.module.min.js",
+  "three/addons/": "https://cdnjs.cloudflare.com/ajax/libs/three.js/0.160.0/"
+}}
+</script>
+
+<script type="module">
+import * as THREE from 'three';
+import { GLTFLoader } from 'https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/loaders/GLTFLoader.js';
+
+// ╔══════════════════════════════════════════════════════════════════╗
+// ║  ★★★  EVERYTHING YOU EDIT IS IN THIS BLOCK  ★★★                    ║
+// ║                                                                    ║
+// ║  HOW TO POSITION ANYTHING:                                         ║
+// ║  1. Open the map, press the "P" key (placement mode).             ║
+// ║  2. Click anywhere on the map.                                     ║
+// ║  3. Open browser console (F12) — it prints  x:____, z:____         ║
+// ║  4. Paste those numbers into the items below.                      ║
+// ╚══════════════════════════════════════════════════════════════════╝
+
+// ── GLOBAL SIZES (change one number → affects all of that type) ──
+const SIZES = {
+  person:   28,   // height-ish of little people. Bigger number = bigger people.
+  zonePin:  90,   // height of the floating zone markers/pins
+  egg:      55,   // size of easter-egg icons
+  label:    1.0,  // text-label scale on buildings (1 = normal)
+};
+
+// ── INTERACTIVE ZONES (program points) ──
+// icon, time, type, color shown on the click-card. color is hex 0xRRGGBB.
+const ZONES = [
+  { id:'arrival',  name:'Arrival & Bus',    x:-400, z:600,  icon:'🚌', time:'10:00', type:'Transport',        color:0x6ec8f0, desc:'The bus drops everyone here. Grab your badge and head toward the hotel.' },
+  { id:'hotel',    name:'Hotel Olympie',    x:600,  z:200,  icon:'🏨', time:'11:30', type:'Base · Check-in',  color:0x6a90d0, desc:'Our home base. Check in, drop bags, meet in the lobby. Wellness & restaurant here.' },
+  { id:'adventure',name:'Adventure Park',   x:200,  z:-700, icon:'🎢', time:'13:00', type:'Activity',         color:0xf0c020, desc:'Giant 17m swing, climbing wall, water balls and a pumptrack. The adrenaline core.' },
+  { id:'bobsled',  name:'Bobsled Track',    x:-500, z:-600, icon:'🛷', time:'15:00', type:'Activity',         color:0xe85040, desc:'1400m of stainless track winding down the slope. Race a colleague!' },
+  { id:'bridge',   name:'White Bridge',     x:0,    z:100,  icon:'🌉', time:'—',     type:'Photo spot',       color:0xeef2f0, desc:'The iconic white arch bridge over the river Labe. Classic team-photo spot.' },
+  { id:'meadow',   name:'Meadow Gathering', x:100,  z:500,  icon:'🍽️', time:'18:00', type:'Dinner · Evening', color:0x8ad860, desc:'Open meadow for the evening BBQ, music and awards. Where the day winds down.' },
+];
+
+// ── PEOPLE (avatars) ──
+// Add a person = add one line. Optional "size" overrides the global person size.
+const PEOPLE = [
+  { id:'p1', name:'Placeholder A', x:550,  z:220,  color:0xff6b9d },
+  { id:'p2', name:'Placeholder B', x:180,  z:-680, color:0x4ecdc4 },
+  { id:'p3', name:'Placeholder C', x:80,   z:480,  color:0xffd166 },
+];
+
+// ── TEXT LABELS on buildings (floating name tags) ──
+// Appears as a little sign hovering above a point. Pure UI text, editable.
+const LABELS = [
+  { text:'Hotel Olympie', x:600, z:200, y:260 },
+  // { text:'Restaurant', x:..., z:..., y:200 },
+];
+
+// ── DECOR ICONS on buildings/spots (emoji floating markers, non-clickable) ──
+const DECOR = [
+  // { emoji:'🏁', x:200, z:-700, y:220 },
+  // { emoji:'⛲', x:0, z:0, y:160 },
+];
+
+// ── INFO POST (one signpost that opens ALL links & data) ──
+const INFO_POST = {
+  x:0, z:0, y:0,                 // position on map (use placement mode!)
+  title:'Everything in one place',
+  links:[
+    { icon:'📍', label:'Location',     url:'#' },
+    { icon:'📅', label:'Add to Calendar', url:'#' },
+    { icon:'🚌', label:'Bus Tracker',  url:'#' },
+    { icon:'🎵', label:'Spotify Playlist', url:'#' },
+    { icon:'💬', label:'Slack Chat',   url:'#' },
+    { icon:'📸', label:'Photo Album',  url:'#' },
+    { icon:'🎮', label:'Kahoot Quiz',  url:'#' },
+    { icon:'🏆', label:'Feedback',     url:'#' },
+  ],
+};
+
+// ── EASTER EGGS (hidden, with tracker + chain hints) ──
+const EGGS = [
+  { id:'e1', x:-700, z:300,  emoji:'🐈', msg:'Meow! The resort cat 🐈 Hint: check near the bridge…' },
+  { id:'e2', x:50,   z:120,  emoji:'🦌', msg:'A deer by the bridge 🦌 Hint: someone is up at the hotel…' },
+  { id:'e3', x:640,  z:240,  emoji:'🔑', msg:'A golden key at the hotel 🔑 Hint: look at the adventure park…' },
+  { id:'e4', x:230,  z:-720, emoji:'🎈', msg:'A balloon at the park 🎈 Hint: down by the bobsled run…' },
+  { id:'e5', x:-520, z:-620, emoji:'🏆', msg:'You found them all! 🏆 Show this screen to the organizer for MERCH!' },
+];
+
+// ╔══════════════════════════════════════════════════════════════════╗
+// ║  ENGINE                                                           ║
+// ╚══════════════════════════════════════════════════════════════════╝
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0xbcdcf0);
+
+const app = document.getElementById('app');
+const renderer = new THREE.WebGLRenderer({ antialias:true });
+renderer.setSize(innerWidth, innerHeight);
+renderer.setPixelRatio(Math.min(devicePixelRatio,2));
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+app.appendChild(renderer.domElement);
+
+const layers = {
+  map:new THREE.Group(), zones:new THREE.Group(), people:new THREE.Group(),
+  labels:new THREE.Group(), decor:new THREE.Group(), eggs:new THREE.Group(), info:new THREE.Group()
+};
+Object.values(layers).forEach(g=>scene.add(g));
+
+// ── LIGHTS ──
+const sun = new THREE.DirectionalLight(0xfff2dc, 2.2);
+sun.position.set(-1500,2400,1200); sun.castShadow=true;
+sun.shadow.mapSize.set(2048,2048);
+Object.assign(sun.shadow.camera,{near:100,far:8000,left:-3000,right:3000,top:3000,bottom:-3000});
+sun.shadow.bias=-0.0005; scene.add(sun);
+scene.add(new THREE.HemisphereLight(0xbcdcf0,0x4a6a3a,1.0));
+const fill=new THREE.DirectionalLight(0xa8ccff,0.4); fill.position.set(1200,800,-1000); scene.add(fill);
+
+// ── ORTHOGRAPHIC SIMS CAMERA ──
+let aspect = innerWidth/innerHeight;
+const camera = new THREE.OrthographicCamera(-1000*aspect,1000*aspect,1000,-1000,1,30000);
+
+const cam = {
+  tx:0, tz:0, rot:Math.PI*0.25, tilt:0.62, zoom:2400,
+  _tx:0, _tz:0, _rot:Math.PI*0.25, _zoom:2400,
+};
+let ZOOM_MIN=120, ZOOM_MAX=5000, BOUND=4500, GROUND_Y=0;
+
+function applyCamera(){
+  cam._tx+=(cam.tx-cam._tx)*0.16; cam._tz+=(cam.tz-cam._tz)*0.16;
+  cam._rot+=(cam.rot-cam._rot)*0.12; cam._zoom+=(cam.zoom-cam._zoom)*0.14;
+  const d=8000, ct=Math.cos(cam.tilt), st=Math.sin(cam.tilt), cr=Math.cos(cam._rot), sr=Math.sin(cam._rot);
+  camera.position.set(cam._tx+cr*ct*d, GROUND_Y+st*d, cam._tz+sr*ct*d);
+  camera.lookAt(cam._tx,GROUND_Y,cam._tz);
+  const a=innerWidth/innerHeight;
+  camera.left=-cam._zoom*a; camera.right=cam._zoom*a; camera.top=cam._zoom; camera.bottom=-cam._zoom;
+  camera.updateProjectionMatrix();
+  const z=cam._zoom;
+  document.getElementById('zlevel').textContent = z>3500?'Overview': z>2000?'Area': z>900?'Activity':'Close-up';
+}
+
+// ── LOAD GLB ──
+const loader = new GLTFLoader();
+let mapBox = null;
+loader.load('resort-map.glb',
+  (gltf)=>{
+    const root = gltf.scene;
+    root.traverse(o=>{
+      if(o.isMesh){ o.castShadow=true; o.receiveShadow=true;
+        if(o.material){ o.material.side=THREE.FrontSide; }
+      }
+    });
+    layers.map.add(root);
+
+    // center & measure
+    mapBox = new THREE.Box3().setFromObject(root);
+    const c = mapBox.getCenter(new THREE.Vector3());
+    const size = mapBox.getSize(new THREE.Vector3());
+    GROUND_Y = mapBox.min.y + size.y*0.15;
+
+    // recenter map at origin
+    root.position.x -= c.x; root.position.z -= c.z;
+    mapBox.setFromObject(root);
+
+    // calibrate camera bounds & zoom to map size
+    const span = Math.max(size.x, size.z);
+    BOUND = span*0.55;
+    ZOOM_MIN = span*0.006;   // allow very close zoom
+    ZOOM_MAX = span*0.62;
+    cam.zoom = span*0.30; cam._zoom = cam.zoom;
+    GROUND_Y = mapBox.min.y + (mapBox.max.y-mapBox.min.y)*0.12;
+
+    // now that ground is known, drop everything onto it
+    buildZones(); buildPeople(); buildLabels(); buildDecor(); buildEggs(); buildInfoPost();
+
+    document.getElementById('loading').classList.add('hide');
+  },
+  (xhr)=>{ if(xhr.total){ document.querySelector('#bar i').style.width = (xhr.loaded/xhr.total*100)+'%'; } },
+  (err)=>{ document.getElementById('loading').innerHTML='<div>⚠️ Could not load resort-map.glb<br><span style="font-size:0.75rem;opacity:0.7">Make sure the .glb file sits next to this HTML file.</span></div>'; console.error(err); }
+);
+
+// ── RAYCAST ground height helper ──
+const _ray = new THREE.Raycaster();
+function groundYAt(x,z){
+  if(!layers.map.children.length) return GROUND_Y;
+  _ray.set(new THREE.Vector3(x, 5000, z), new THREE.Vector3(0,-1,0));
+  const hits=_ray.intersectObject(layers.map,true);
+  return hits.length? hits[0].point.y : GROUND_Y;
+}
+
+// ── ZONES (Layer) ──
+const zoneHits=[];
+function buildZones(){
+  ZONES.forEach(zone=>{
+    const y=groundYAt(zone.x,zone.z);
+    const grp=new THREE.Group();
+    const H=SIZES.zonePin, R=H*0.33;
+    const pole=new THREE.Mesh(new THREE.CylinderGeometry(R*0.12,R*0.12,H,8),new THREE.MeshStandardMaterial({color:0xb8c0c8,roughness:0.4,metalness:0.6}));
+    pole.position.y=H/2; pole.castShadow=true; grp.add(pole);
+    const ringMat=new THREE.MeshStandardMaterial({color:zone.color,emissive:zone.color,emissiveIntensity:0.6,roughness:0.3});
+    const ring=new THREE.Mesh(new THREE.TorusGeometry(R*0.9,R*0.18,8,20),ringMat);
+    ring.position.y=H+R*0.4; ring.rotation.x=Math.PI/2; grp.add(ring);
+    const orb=new THREE.Mesh(new THREE.SphereGeometry(R*0.7,16,12),new THREE.MeshStandardMaterial({color:zone.color,emissive:zone.color,emissiveIntensity:0.85,roughness:0.3}));
+    orb.position.y=H+R*0.4; grp.add(orb);
+    grp.position.set(zone.x,y,zone.z);
+    grp.userData={zone,baseY:y,orb,ring,topY:H+R*0.4};
+    const hit=new THREE.Mesh(new THREE.SphereGeometry(R*2.6,8,6),new THREE.MeshBasicMaterial({visible:false}));
+    hit.position.y=H*0.7; hit.userData.zoneGroup=grp; grp.add(hit); zoneHits.push(hit);
+    layers.zones.add(grp);
+  });
+}
+
+// ── PEOPLE (Layer) ──
+const peopleHits=[];
+function buildPeople(){
+  PEOPLE.forEach((person,idx)=>{
+    const y=groundYAt(person.x,person.z);
+    const grp=new THREE.Group();
+    const mat=new THREE.MeshStandardMaterial({color:person.color,roughness:0.7,flatShading:true});
+    const S=person.size||SIZES.person;   // S = overall unit
+    // proportions fixed relative to S so everyone is identical size
+    const bodyR=S*0.42, bodyLen=S*1.0, headR=S*0.5;
+    const body=new THREE.Mesh(new THREE.CapsuleGeometry(bodyR,bodyLen,4,10),mat);
+    body.position.y=bodyR+bodyLen/2;         // feet exactly on ground
+    body.castShadow=true; grp.add(body);
+    const head=new THREE.Mesh(new THREE.SphereGeometry(headR,14,12),mat);
+    head.position.y=bodyR+bodyLen+headR*0.85;
+    head.castShadow=true; grp.add(head);
+    grp.position.set(person.x,y,person.z);
+    grp.userData={person,baseY:y,phase:idx*1.7};  // deterministic phase
+    const hit=new THREE.Mesh(new THREE.SphereGeometry(S*1.8,8,6),new THREE.MeshBasicMaterial({visible:false}));
+    hit.position.y=S*1.2; hit.userData.personGroup=grp; grp.add(hit); peopleHits.push(hit);
+    layers.people.add(grp);
+  });
+}
+
+// ── LABELS (floating building name tags) ──
+function makeTextSprite(text){
+  const pad=24, font=44;
+  const cv=document.createElement('canvas'), ctx=cv.getContext('2d');
+  ctx.font=`700 ${font}px Nunito, sans-serif`;
+  const w=ctx.measureText(text).width;
+  cv.width=w+pad*2; cv.height=font+pad*1.4;
+  // bg pill
+  ctx.fillStyle='rgba(16,28,38,0.82)';
+  const r=18; const W=cv.width,H=cv.height;
+  ctx.beginPath(); ctx.moveTo(r,0); ctx.arcTo(W,0,W,H,r); ctx.arcTo(W,H,0,H,r); ctx.arcTo(0,H,0,0,r); ctx.arcTo(0,0,W,0,r); ctx.fill();
+  ctx.strokeStyle='rgba(127,200,232,0.5)'; ctx.lineWidth=3; ctx.stroke();
+  ctx.font=`700 ${font}px Nunito, sans-serif`; ctx.fillStyle='#eaf4ff'; ctx.textBaseline='middle'; ctx.textAlign='center';
+  ctx.fillText(text, W/2, H/2);
+  const tex=new THREE.CanvasTexture(cv); tex.anisotropy=4;
+  const spr=new THREE.Sprite(new THREE.SpriteMaterial({map:tex,depthTest:false,transparent:true}));
+  spr.scale.set(cv.width*SIZES.label*0.9, cv.height*SIZES.label*0.9, 1);
+  return spr;
+}
+function buildLabels(){
+  LABELS.forEach(l=>{
+    const y=l.y!=null?groundYAt(l.x,l.z)+l.y:groundYAt(l.x,l.z)+200;
+    const spr=makeTextSprite(l.text);
+    spr.position.set(l.x,y,l.z);
+    layers.labels.add(spr);
+  });
+}
+
+// ── DECOR (emoji floating markers) ──
+function makeEmojiSprite(emoji, px=120){
+  const cv=document.createElement('canvas'); cv.width=cv.height=128;
+  const ctx=cv.getContext('2d'); ctx.font='96px serif'; ctx.textAlign='center'; ctx.textBaseline='middle';
+  ctx.fillText(emoji,64,68);
+  const tex=new THREE.CanvasTexture(cv); tex.anisotropy=4;
+  const spr=new THREE.Sprite(new THREE.SpriteMaterial({map:tex,depthTest:false,transparent:true}));
+  spr.scale.set(px,px,1); return spr;
+}
+function buildDecor(){
+  DECOR.forEach(d=>{
+    const y=groundYAt(d.x,d.z)+(d.y||150);
+    const spr=makeEmojiSprite(d.emoji);
+    spr.position.set(d.x,y,d.z);
+    layers.decor.add(spr);
+  });
+}
+
+// ── EASTER EGGS ──
+const eggHits=[]; let eggsFound=0;
+function buildEggs(){
+  EGGS.forEach(egg=>{
+    const y=groundYAt(egg.x,egg.z)+SIZES.egg*0.8;
+    const spr=makeEmojiSprite(egg.emoji, SIZES.egg);
+    spr.position.set(egg.x,y,egg.z); spr.material.opacity=0.5;
+    const grp=new THREE.Group(); grp.add(spr); grp.position.set(0,0,0);
+    grp.userData={egg,spr,baseY:y,found:false};
+    const hit=new THREE.Mesh(new THREE.SphereGeometry(SIZES.egg*1.4,8,6),new THREE.MeshBasicMaterial({visible:false}));
+    hit.position.set(egg.x,y,egg.z); hit.userData.eggGroup=grp; layers.eggs.add(hit); eggHits.push(hit);
+    layers.eggs.add(grp);
+  });
+}
+
+// ── INFO POST (signpost with all links) ──
+const infoHits=[];
+function buildInfoPost(){
+  if(INFO_POST.x===0&&INFO_POST.z===0) { /* still place it, user moves later */ }
+  const y=groundYAt(INFO_POST.x,INFO_POST.z);
+  const grp=new THREE.Group();
+  const H=SIZES.zonePin*1.1;
+  const pole=new THREE.Mesh(new THREE.CylinderGeometry(H*0.04,H*0.04,H,8),new THREE.MeshStandardMaterial({color:0x8d6e3a,roughness:0.8})); pole.position.y=H/2; pole.castShadow=true; grp.add(pole);
+  const sign=new THREE.Mesh(new THREE.BoxGeometry(H*0.7,H*0.32,H*0.06),new THREE.MeshStandardMaterial({color:0xfdd87a,roughness:0.6})); sign.position.y=H*0.92; grp.add(sign);
+  const spr=makeEmojiSprite('🧭', H*0.5); spr.position.y=H*0.92; spr.position.z=H*0.05; grp.add(spr);
+  grp.position.set(INFO_POST.x,y,INFO_POST.z);
+  grp.userData={baseY:y};
+  const hit=new THREE.Mesh(new THREE.SphereGeometry(H*0.6,8,6),new THREE.MeshBasicMaterial({visible:false}));
+  hit.position.y=H*0.9; hit.userData.infoGroup=grp; grp.add(hit); infoHits.push(hit);
+  layers.info.add(grp);
+}
+
+// ╔══════════ INTERACTION ══════════╗
+const raycaster=new THREE.Raycaster(), mouse=new THREE.Vector2();
+let hovered=null, placeMode=false;
+function pick(cx,cy){
+  mouse.x=(cx/innerWidth)*2-1; mouse.y=-(cy/innerHeight)*2+1;
+  raycaster.setFromCamera(mouse,camera);
+  const hits=raycaster.intersectObjects([...zoneHits,...peopleHits,...eggHits,...infoHits],false);
+  return hits.length?hits[0].object:null;
+}
+function onClickPick(cx,cy){
+  if(placeMode){ logPlacement(cx,cy); return; }
+  const o=pick(cx,cy); if(!o) return;
+  if(o.userData.zoneGroup) openCard(o.userData.zoneGroup.userData.zone);
+  else if(o.userData.personGroup) openPersonCard(o.userData.personGroup.userData.person);
+  else if(o.userData.eggGroup) openEgg(o.userData.eggGroup);
+  else if(o.userData.infoGroup) openInfo();
+}
+function logPlacement(cx,cy){
+  mouse.x=(cx/innerWidth)*2-1; mouse.y=-(cy/innerHeight)*2+1;
+  raycaster.setFromCamera(mouse,camera);
+  const hits=raycaster.intersectObject(layers.map,true);
+  if(hits.length){ const p=hits[0].point; console.log(`📍 x:${Math.round(p.x)}, z:${Math.round(p.z)}  (y:${Math.round(p.y)})`); }
+}
+
+function openCard(zone){
+  document.getElementById('card-icon').textContent=zone.icon;
+  document.getElementById('card-title').textContent=zone.name;
+  document.getElementById('card-time').textContent=zone.time==='—'?'Anytime':('🕐 '+zone.time);
+  document.getElementById('card-type').textContent=zone.type;
+  document.getElementById('card-desc').textContent=zone.desc;
+  document.getElementById('card').classList.add('open');
+}
+function openPersonCard(p){
+  document.getElementById('card-icon').textContent='👤';
+  document.getElementById('card-title').textContent=p.name;
+  document.getElementById('card-time').textContent='Team member';
+  document.getElementById('card-type').textContent='People layer';
+  document.getElementById('card-desc').textContent='Placeholder avatar. Later: real name, photo, greeting and animation.';
+  document.getElementById('card').classList.add('open');
+}
+window.closeCard=()=>document.getElementById('card').classList.remove('open');
+
+function openEgg(grp){
+  if(!grp.userData.found){
+    grp.userData.found=true; eggsFound++;
+    document.getElementById('egg-count').textContent=eggsFound;
+    grp.userData.spr.material.opacity=1;
+  }
+  document.getElementById('card-icon').textContent=grp.userData.egg.emoji;
+  document.getElementById('card-title').textContent='Easter Egg!';
+  document.getElementById('card-time').textContent=`Found ${eggsFound} / ${EGGS.length}`;
+  document.getElementById('card-type').textContent='Hidden secret';
+  document.getElementById('card-desc').textContent=grp.userData.egg.msg;
+  document.getElementById('card').classList.add('open');
+}
+function openInfo(){
+  document.getElementById('card-icon').textContent='🧭';
+  document.getElementById('card-title').textContent=INFO_POST.title;
+  document.getElementById('card-time').textContent='All links';
+  document.getElementById('card-type').textContent='Info point';
+  const linksHtml = INFO_POST.links.map(l=>`<a href="${l.url}" target="_blank" style="display:flex;align-items:center;gap:10px;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.12);border-radius:12px;padding:10px 12px;text-decoration:none;color:#eaf4ff;font-weight:700;font-size:0.85rem;margin-bottom:8px"><span style="font-size:1.3rem">${l.icon}</span>${l.label}</a>`).join('');
+  document.getElementById('card-desc').innerHTML = linksHtml;
+  document.getElementById('card').classList.add('open');
+}
+
+// ╔══════════ CAMERA CONTROLS ══════════╗
+// Simple, robust screen-delta pan (works identically on desktop & touch).
+// Screen drag is converted to world movement using the current zoom + rotation.
+
+let down=false,dragging=false,dx0=0,dy0=0,plx=0,ply=0;
+
+function panByScreen(dxS, dyS){
+  // Derive ground-plane axes from the camera's actual look direction.
+  // (Proven correct rather than reading matrix basis, which tilts into the sky.)
+  const lookX = cam.tx - camera.position.x;
+  const lookZ = cam.tz - camera.position.z;
+  const ll = Math.hypot(lookX, lookZ) || 1;
+  const lx = lookX/ll, lz = lookZ/ll;        // "into screen" on ground = screen-UP
+  const rx = -lz, rz = lx;                    // screen-RIGHT on ground
+  const upp = (cam._zoom*2)/innerHeight;
+  // drag right → target moves left (−right); drag down → target moves toward viewer (−look/up)
+  cam.tx += (-dxS*rx - dyS*lx) * upp;
+  cam.tz += (-dxS*rz - dyS*lz) * upp;
+  clampTarget();
+}
+
+let touchActive=false;
+renderer.domElement.addEventListener('mousedown',e=>{
+  if(touchActive) return;
+  down=true; dragging=false; dx0=plx=e.clientX; dy0=ply=e.clientY;
+});
+addEventListener('mousemove',e=>{
+  if(touchActive) return;
+  const o=pick(e.clientX,e.clientY);
+  const nh=o?(o.userData.zoneGroup||o.userData.personGroup||o.userData.eggGroup||o.userData.infoGroup):null;
+  if(hovered!==nh){ hovered=nh; renderer.domElement.style.cursor=hovered?'pointer':(placeMode?'crosshair':(down?'grabbing':'grab')); }
+  if(down){
+    const mx=e.clientX-plx, my=e.clientY-ply; plx=e.clientX; ply=e.clientY;
+    if(Math.abs(e.clientX-dx0)+Math.abs(e.clientY-dy0)>4) dragging=true;
+    panByScreen(mx,my);
+  }
+});
+addEventListener('mouseup',e=>{ if(touchActive)return; if(down&&!dragging) onClickPick(e.clientX,e.clientY); down=false; renderer.domElement.style.cursor=placeMode?'crosshair':'grab'; });
+renderer.domElement.style.cursor='grab';
+
+function clampTarget(){ cam.tx=Math.max(-BOUND,Math.min(BOUND,cam.tx)); cam.tz=Math.max(-BOUND,Math.min(BOUND,cam.tz)); }
+
+// wheel zoom toward cursor
+renderer.domElement.addEventListener('wheel',e=>{
+  e.preventDefault();
+  const before=screenToWorld(e.clientX,e.clientY);
+  cam.zoom=Math.max(ZOOM_MIN,Math.min(ZOOM_MAX,cam.zoom*(e.deltaY>0?1.12:0.88)));
+  const after=screenToWorld(e.clientX,e.clientY);
+  if(before&&after){ cam.tx+=before.x-after.x; cam.tz+=before.z-after.z; clampTarget(); }
+},{passive:false});
+
+function screenToWorld(sx,sy){
+  mouse.x=(sx/innerWidth)*2-1; mouse.y=-(sy/innerHeight)*2+1;
+  raycaster.setFromCamera(mouse,camera);
+  const plane=new THREE.Plane(new THREE.Vector3(0,1,0),-GROUND_Y); const pt=new THREE.Vector3();
+  return raycaster.ray.intersectPlane(plane,pt)?{x:pt.x,z:pt.z}:null;
+}
+
+// ── TOUCH (one finger = pan, two fingers = pinch zoom) ──
+let tPan=false, tPinch=false, tDist=0, tpx=0, tpy=0, tsx=0, tsy=0, tMoved=false;
+renderer.domElement.addEventListener('touchstart',e=>{
+  touchActive=true;
+  if(e.touches.length===1){
+    tPan=true; tPinch=false; tMoved=false;
+    tpx=tsx=e.touches[0].clientX; tpy=tsy=e.touches[0].clientY;
+  } else if(e.touches.length===2){
+    tPan=false; tPinch=true;
+    tDist=Math.hypot(e.touches[0].clientX-e.touches[1].clientX, e.touches[0].clientY-e.touches[1].clientY);
+  }
+},{passive:false});
+renderer.domElement.addEventListener('touchmove',e=>{
+  e.preventDefault();
+  if(tPan && e.touches.length===1){
+    const t=e.touches[0];
+    const mx=t.clientX-tpx, my=t.clientY-tpy; tpx=t.clientX; tpy=t.clientY;
+    if(Math.abs(t.clientX-tsx)+Math.abs(t.clientY-tsy)>8) tMoved=true;
+    panByScreen(mx, -my);   // touch devices invert vertical; flip Y
+  } else if(tPinch && e.touches.length===2){
+    const mx=(e.touches[0].clientX+e.touches[1].clientX)/2, my=(e.touches[0].clientY+e.touches[1].clientY)/2;
+    const before=screenToWorld(mx,my);
+    const d=Math.hypot(e.touches[0].clientX-e.touches[1].clientX, e.touches[0].clientY-e.touches[1].clientY);
+    if(tDist>0){ cam.zoom=Math.max(ZOOM_MIN,Math.min(ZOOM_MAX, cam.zoom*(tDist/d))); }
+    tDist=d;
+    const after=screenToWorld(mx,my);
+    if(before&&after){ cam.tx+=before.x-after.x; cam.tz+=before.z-after.z; clampTarget(); }
+  }
+},{passive:false});
+renderer.domElement.addEventListener('touchend',e=>{
+  if(tPan && !tMoved && e.changedTouches.length){ onClickPick(tsx,tsy); }
+  if(e.touches.length===0){ tPan=false; tPinch=false; }
+},{passive:false});
+
+// keyboard
+const keys={};
+addEventListener('keydown',e=>{ keys[e.key.toLowerCase()]=true;
+  if(e.key.toLowerCase()==='q') cam.rot-=Math.PI/8;
+  if(e.key.toLowerCase()==='e') cam.rot+=Math.PI/8;
+  if(e.key.toLowerCase()==='r') resetView();
+  if(e.key.toLowerCase()==='p'){ placeMode=!placeMode; document.getElementById('placehud').classList.toggle('on',placeMode); renderer.domElement.style.cursor=placeMode?'crosshair':'grab'; }
+});
+addEventListener('keyup',e=>{ keys[e.key.toLowerCase()]=false; });
+function keyboardMove(){
+  let mx=0,my=0;
+  if(keys['w']||keys['arrowup'])my+=1; if(keys['s']||keys['arrowdown'])my-=1;
+  if(keys['a']||keys['arrowleft'])mx+=1; if(keys['d']||keys['arrowright'])mx-=1;
+  if(mx||my){ panByScreen(mx*14, my*14); }
+}
+
+// edge scroll disabled (was causing unexpected drift); keep stub
+let edge={x:0,y:0};
+function edgeScroll(){ /* disabled for clarity */ }
+
+document.getElementById('rotL').onclick=()=>cam.rot-=Math.PI/8;
+document.getElementById('rotR').onclick=()=>cam.rot+=Math.PI/8;
+document.getElementById('zoomIn').onclick=()=>cam.zoom=Math.max(ZOOM_MIN,cam.zoom*0.85);
+document.getElementById('zoomOut').onclick=()=>cam.zoom=Math.min(ZOOM_MAX,cam.zoom*1.18);
+document.getElementById('reset').onclick=()=>resetView();
+function resetView(){ cam.tx=0; cam.tz=0; cam.rot=Math.PI*0.25; cam.zoom=ZOOM_MAX*0.5; closeCard(); }
+
+document.querySelectorAll('#layers input').forEach(inp=>{ inp.addEventListener('change',()=>{ layers[inp.dataset.layer].visible=inp.checked; }); });
+document.getElementById('egg-total').textContent = EGGS.length;
+
+addEventListener('resize',()=>{ camera.updateProjectionMatrix(); renderer.setSize(innerWidth,innerHeight); });
+
+// animate
+const S_HOP = SIZES.person*0.28;
+let T=0;
+function animate(){
+  requestAnimationFrame(animate); T+=0.016;
+  keyboardMove(); edgeScroll(); applyCamera();
+  layers.zones.children.forEach((g,i)=>{
+    g.userData.orb.position.y=180+72+Math.sin(T*2+i)*14;
+    g.userData.ring.rotation.z+=0.01;
+    const target=(hovered===g)?1.4:1;
+    g.userData.ring.scale.x+=(target-g.userData.ring.scale.x)*0.2; g.userData.ring.scale.y=g.userData.ring.scale.x;
+  });
+  // people: gentle idle hop (small, keeps feet near ground)
+  layers.people.children.forEach(g=>{
+    const b=Math.sin(T*2.2+g.userData.phase);
+    g.position.y=g.userData.baseY+Math.max(0,b)*S_HOP;
+    // subtle turn so they feel alive
+    g.rotation.y=Math.sin(T*0.6+g.userData.phase)*0.3;
+  });
+  // eggs gentle pulse
+  layers.eggs.children.forEach(g=>{ if(g.userData&&g.userData.spr){ g.userData.spr.position.y=g.userData.baseY+Math.sin(T*2+g.position.x)*8; if(!g.userData.found) g.userData.spr.material.opacity=0.35+0.3*(0.5+0.5*Math.sin(T*1.5+g.position.x)); } });
+  // info post bob
+  layers.info.children.forEach(g=>{ if(g.userData) g.position.y=g.userData.baseY+Math.sin(T*1.5)*4; });
+  renderer.render(scene,camera);
+}
+animate();
+</script>
+</body>
+</html>
